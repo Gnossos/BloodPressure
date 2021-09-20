@@ -1,0 +1,20 @@
+---
+title: "Version 1.0"
+author: "Marshall M. A. Feldman"
+date: "8/28/2021"
+output: html_document
+---   
+
+This document shows all the steps for creating a blood pressure report.
+
+# Contents
+
+
+# Libraries
+```{r}
+library("rio")                                  # For reading i/o including ods file.
+library(tidyverse)                              # Required tidyverse elements
+library("ggplot2", "rlang")                      # Additional tidyverse packages (ggplot2 may be superfluous)
+library("bp")                                   # Blood pressure package
+```
+

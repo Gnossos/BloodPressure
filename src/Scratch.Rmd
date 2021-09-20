@@ -1,0 +1,63 @@
+---
+title: "Scratch"
+output: html_notebook
+---
+
+This is a workspace for trying things out.
+
+# Stackoverflow Approach
+
+See https://stackoverflow.com/questions/26741703/adding-multiple-shadows-rectangles-to-ggplot2-graph
+
+```{r}
+ggplot(tmp, aes(Season,value, color = group)) + geom_point(size = 4, shape = 19) +
+  scale_color_manual(values = c("red", "gray55")) + 
+  annotate("rect", xmin = c(1947.5, 1950.5, 1957.5), xmax = c(1948.5, 1956.5, 1965.5), 
+           ymin = -Inf, ymax = Inf, alpha = .1, fill = c("green", "green", "blue"))
+```
+
+Now try converting this into what I need.
+
+```{r}
+library(tibble)
+library(tsibble)
+library(ggplot2)
+library(dplyr)
+
+first_date <- min(bp_tsbl$DATE)
+last_date <- max(bp_tsbl$DATE)
+
+ymins_SBP <- filter(bp_ranges, TYPE == "SBP")$LOW
+ymaxes_SBP <- filter(bp_ranges, TYPE == "SBP")$HIGH
+  
+  ggplot(bp_tsbl, aes(DATE, SBP)) + 
+#  scale_color_manual(values = bp_colors) +
+  annotate("rect", xmin = first_date, xmax = last_date,
+           ymin = ymins_SBP, ymax = ymaxes_SBP, fill = bp_colors, color = bp_colors) +
+    geom_point()
+```
+
+Now try coloring just the points.
+
+
+```{r}
+plot_SBP <-   ggplot(bp_tsbl, aes(DATE, SBP)) +
+  scale_color_manual(values = bp_colors) +
+          geom_point(aes(color = `SBP_CATEGORY`))
+
+plot_SBP <- plot_SBP +
+  ggtitle("Systolic") +
+  theme(plot.title = element_text(vjust = 0)) +
+  theme(legend.position = "bottom") +
+  labs(color = "Category") +
+  guides(color = guide_legend(nrow = 1))
+
+plot_SBP
+
+```
+
+#TODO:
+#     1) Put categories at bottom
+#     2) Add trend line
+#     3) Change background
+#     4) Add Annotations

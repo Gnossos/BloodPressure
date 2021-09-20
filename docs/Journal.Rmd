@@ -1,0 +1,391 @@
+---
+title: "Journal"
+author: "Marshall Feldman"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook dedicated to taking notes about the data science associated with this project. It combines a daily log with topic-oriented notes.
+
+# Importing Data
+
+## ***The real stuff begins just before 8/14/2021.***
+
+## Getting Up to Speed
+
+### 2021/08/12:
+
+I started the project as a RStudio project and a private GitHub project. Initial data are kept in a LibreOffice Calc spreadsheet: Blood Pressure.ods. Then I tried to read it into R by using the [readODS package](https://cran.r-project.org/web/packages/readODS/index.html). I installed a bunch of packages, but unfortunately I did not keep track of all of them.
+
+Then, in the console, I used this code and got the error message beneath it.ta
+
+```{r}
+library(datasets)
+library("readODS")
+library("rio")
+install_formats()
+library("tsibble")
+bp_ds <- read_ods(
+  path = "../data/Blood Pressure.ods",
+  sheet = "Export",
+  skip = 2)
+
+```
+
+Note that here the path begins with ".." because this notebook is stored in ProjectTemplate's "doc" folder and the data are stored in the "data" folder.
+
+I then tried to fix this by renaming the data file from "Blood Pressure.ods" to "MMAF.ods". I got the same results.
+
+Then I snooped around the Internet and discovered the [rio package](https://cran.r-project.org/web/packages/rio/). Here I've moved **rio**'s **library** and **install_formats** statements to the previous chunk. I then used the following code, with the same results as before:
+
+```{r}
+convert("../data/MMAF.ods", "../data/MMAF.rds")
+```
+
+and
+
+```{r}
+x <- import("../data/MMAF.ods")
+```
+
+Frustrated, I posted a question on [stackoverflow](https://stackoverflow.com/questions/68766394/importing-from-a-libreoffice-calc-workbook), and Kat suggested viewing a post on "[Importing all sheets of an ODS file in R, keeping the name(s) of the sheets](https://stackoverflow.com/questions/61542069/importing-all-sheet-of-a-ods-file-in-r-keeping-the-name-of-the-sheets)". I viewed it and went to bed.
+
+### 2021/08/13:
+
+I decided to replicate duckmayr's example:
+
+```{r}
+library(readODS)
+library(dplyr)
+library(purrr)
+library(tidyr)
+
+path <- "../data/test.ods"
+
+sheets <- ods_sheets(path)
+mylist <- map(seq_along(sheets), read_ods, path = path) %>%
+  set_names(sheets)
+mylist
+```
+
+But it still didn't work. Eventually, I found [this advice](https://github.com/r-lib/devtools/issues/2224) and reinstalled the **cli** package (install.packages("cli")). This fixed things.
+
+Based on the code above, here's what I learned:
+
+-   **map** is in the [purrr package](https://purrr.tidyverse.org/), which provides functional programming tools
+
+-   **map** is one of a family of functions that do something for every element in a vector. **map** itself creates a list.
+
+-   Here **map** is used to apply **read_ods** to every worksheet in the test.ods file.
+
+## The Real Import
+
+Now let's finally try to get the real data in.
+
+## MODIFIED: 8/27/2021:
+
+```{r}
+library(datasets)
+library("readODS")
+library("rio")
+library("tsibble")
+library("dplyr")
+library("tidyr")
+library("ggplot2")
+library("bp")
+convert("../data/Blood Pressure.ods","../data/bp_data.rds", in_opts = list(sheet = "Export",  skip = 2))
+bp_data <- readRDS("../data/bp_data.rds")
+```
+
+\#TODO: (8/27/2021): Get the convert to work properly.
+
+### 2021/08/14:
+
+Finished the last chunk from yesterday.
+
+## Process Data for *bp* Package
+
+We now have a dataframe, **bp_data**, containing the blood pressure data. Now use the *process_data* function of the *bp* package to put it in the required format.
+
+```{r}
+bp_proc <- process_data(bp_data,
+                        sbp = 'Systolic',
+                        dbp = 'Diastolic',
+                        bp_datetime = "DateTime",
+                        hr = "Pulse"
+                        )
+save(bp_proc, file = "../data/bp_proc.rds")
+
+```
+
+The messages in red are just warnings.
+
+## 2011/08/17:
+
+## Tidying the Data
+
+Labeling the column for comments as "Comment(s)" was a bad idea. Earlier I fixed this in the Console, and here I'll do it again just to illustrate how. I've already changed the column heading to "Comments," and this should be the end of it.
+
+```{r paged.print=FALSE}
+names(bp_data)[names(bp_data) == "Comment(s)"] <- "Comments"
+# Do the same for bp_proc
+names(bp_proc)[names(bp_proc) == "COMMENTS(S)"] <- "COMMENTS"
+
+```
+
+Also, most of the comments are blank, which means they are mapped to NA's. Again, this is a bad idea; they should be blanks. Let's fix this.
+
+```{r}
+bp_proc <- bp_proc %>%
+  dplyr::mutate(COMMENTS = replace_na(COMMENTS, " "))
+
+```
+
+Finally, let's delete the rows without data. This should fix the abrupt ending to the time series plot in the Visualizations section (p. 7).
+
+```{r paged.print=FALSE}
+bp_proc <- 
+  bp_proc %>%
+  drop_na()
+
+```
+
+## 2011/08/15:
+
+# Analyzing Data
+
+I followed the **Blood Pressure Metrics** section of the **bp** vignette, [bp: Blood Pressure Analysis in R.](https://cran.r-project.org/web/packages/bp/vignettes/bp.html)
+
+### Blood Pressure Metrics
+
+#### Average Real Variability (arv) vs Successive Variation (sv) pp. 5-6
+
+```{r paged.print=FALSE}
+head(arv(bp_proc))
+head(sv(bp_proc))
+
+```
+
+These results make sense, but *I didn't know how to make RStudio automatically display the expanded results as they appear in the console*.
+
+**I fixed this with Chunk Settings \> Use paged tables \> off.**
+
+Now let's try the side-by-side version also on p. 5. The text suggests the analysis shows **arv** and **sv**, but the code uses cv instead of sv. Here are both results:
+
+```{r paged.print=FALSE}
+head(dplyr::left_join(arv(bp_proc), sv(bp_proc)))
+head(dplyr::left_join(arv(bp_proc), cv(bp_proc)))
+```
+
+### TODO: Since I'm transitioning to the *tidyverse*, I need to learn what the *dplyr* function is doing.
+
+The results above seem reasonable. SBP has larger magnitude than DBP, so it's logical that measures of variance for SBP are larger too. The CV adjusts for magnitude by dividing the standard deviation by the mean. So CV's for SBP & DBP are similar. In other words, other differences are due to the statistics used rather than much greater variation in one BP measurement versus the other. The difference between ARV and SV reflect the fact that SV is the sum of *squared differences,* while ARV is the sum of \*absolute differences\*. Hence, SV has larger magnitude. Because CV adjusts for magnitude by dividing by the mean, its values are \<= than the absolute values used in ARV.
+
+### Peaks and Troughs (p. 6)
+
+```{r paged.print=FALSE}
+head(bp_mag(bp_proc))
+
+```
+
+Again, the orders of magnitude of systolic vs diastolic BP are reflected in the deviations of the peaks and troughs from the means. But if we consider the "normal" values, as percentages the diastolic variations are relatively larger.
+
+## Visualization
+
+### Daily Variability
+
+The following example uses **ggplot**. (pp. 6-7)
+
+```{r paged.print=FALSE}
+viz_data <- bp_mag(bp_proc, inc_date = TRUE)
+plot(viz_data[which(viz_data$Peak_SBP > 0 & viz_data$N > 1),]$DATE, viz_data[which(viz_data$Peak_SBP > 0 & viz_data$N > 1),]$Peak_SBP, type = 'l', col = "red", xlab = "DATE", ylab = "Magnitude")
+lines(viz_data[which(viz_data$Peak_SBP > 0 & viz_data$N > 1),]$DATE, viz_data[which(viz_data$Trough_SBP > 0 & viz_data$N > 1),]$Trough_SBP, col = "darkgreen")
+legend("topright", legend = c("Peak", "Trough"), col = c("red", "darkgreen"), lty = 1)
+
+```
+
+Because there are usually only one observation per day, peaks and troughs are identical, and the green line prints over the red.
+
+**Problem! But for some mysterious reason, the data stop printing at mid-June.** Maybe this is not so mysterious after all. The time series has a big break of missing data when I went into the hospital.
+
+To investigate this, I entered **View(object)** in the console, where "object" is the object (either bp_data or bp_procI wanted to display. Both have **NA**'s where there are blanks in the spreadsheet.
+
+**Solution!** The reason for the abrupt ending is *neither* due to missing data, *nor* a break in the sequence. The reason is because the plot selects cases for which Peak_SBP \> 0, Trough_SBP \> 0, and N \> 1. It's also because the plot is joining only the cases selected to be include in it. At the time of this writing, the last non-zero Peak_SBP and Trough_SBP occur on 2021/06/07; hence, everything after that is omitted from the plot.
+
+Looking at the interior points, between 2021/02/23 and 2021/06/07, the selection eliminates those with magnitudes of zero. The plot then joins the points with magnitudes \> 0.
+
+If I had taken my blood pressure several times per day throughout the period, all the data points would have been included, and the graph would be much more meaningful.
+
+### Categorizing SBP and DBP (p. 8)
+
+This is very simple with the **bp** package.
+
+```{r paged.print=FALSE}
+bp_hist(bp_proc)
+
+```
+
+These results look grim, but at least they're easy to obtain.
+
+### Readings by Time of Day and Day of Week (pp. 8-9)
+
+This uses the **bp** package's *dow_tod_plots* function. As the vignette says, use the **girdExtra** package's *grid_arrange* function to get the results in a grid.
+
+```{r}
+bptable_ex <- dow_tod_plots(bp_proc)
+gridExtra::grid.arrange(bptable_ex[[1]], bptable_ex[[2]], bptable_ex[[3]], bptable_ex[[4]], nrow = 2)
+
+```
+
+The time of day information is not very useful since I hardly ever took my blood pressure after noon. Unfortunately, the *dow_tod_plots* does not generate a legend that explains what the colors mean (if anything). Thursdays, Fridays, and Mondays are the worst days of the week. Coincidence?
+
+### Summary Report (pp. 9 - 10)
+
+This is also quite easy.
+
+```{r}
+bp_report(bp_proc)
+
+```
+
+Doing this in code chunks isn't very nice. For now, it's better to run it in the Console.
+
+**TODO:** Find out how to make the code chunks prettier.
+
+### Scatterplot Matrices
+
+The vignette ends with two scatterplot matrices. One includes two measures of variability: ARV (Average Real Variability), CV (Coefficient of Variation) and SD (Standard Deviation?). The last of these is undefined in the Vingneette, but it appears to be the standard deviation.
+
+```{r}
+viz_arv_cv <- dplyr::left_join(arv(bp_proc), cv(bp_proc))
+#> Joining, by = c("ID", "VISIT", "WAKE", "N")
+pairs(viz_arv_cv[,4:ncol(viz_arv_cv)-1], upper.panel = NULL, col = factor(viz_arv_cv$ID))
+
+```
+
+The resulting plot has only one point. This is because **arv** and **cv** are summary statistics which, in this case, summarize only one ID.
+
+The second matrix includes SBP, DBP, and HR plus three variables that are undefined in the vignette: MAP, PP, and RPP. As far as I can tell, they are:
+
+<dl>
+
+<dt>
+
+<strong>MAP</strong>
+
+</dt>
+
+<dd>
+
+<strong>Mean Arterial Pressure</strong>: The mean pressure through one cardiac cycle.
+
+</dd>
+
+<dt>
+
+<strong>PP</strong>
+
+</dt>
+
+<dd>
+
+<strong>Pulse Pressure</strong>: The difference between systolic and diastolic blood pressure.
+
+</dd>
+
+<dt>
+
+<strong>RPP</strong>
+
+</dt>
+
+<dd>
+
+<strong>Rate Pressure Product</strong>: Resting heart rate (RHR) multiplied by systolic blood pressure. A total value greater than 10,000 indicates increased risk for heart disease.
+
+</dd>
+
+</dl>
+
+The matrix is obtained by:
+
+```{r}
+pairs(bp_proc[,6:11], upper.panel = NULL, col = factor(bp_proc$WAKE))
+
+```
+
+But this doesn't work because, perhaps among other things, the Comments field is smack in the middle of the selected range and the other, generated variables are not in the 6:11 range.
+
+```{r}
+bp_proc <- bp_proc %>%
+  relocate(COMMENTS, .after = "DBP_CATEGORY")
+pairs(bp_proc[,3:8], upper.panel = NULL, col = factor(bp_proc$DAY_OF_WEEK))
+```
+
+This version needed some changes from the vignette. First, **COMMENTS** is smack in the middle of the quantitative data range, so the **relocate** command moves **COMMENTS** to the last column. Second, the range of quantitative variables is 3:8 instead of 6:11, as in the vignette. Third, there is no **WAKE** variable in **bp_proc**, so I used **DAY_OF_WEEK** instead as a factor to color the point circles.
+
+# Original Work
+
+## Time Series
+
+Since we're migrating to the tidyverse, we'll use tibbles and the tsibble package.
+
+```{r}
+library(tibble)
+library(tsibble)
+
+#> Convert bp_proc to a tsbl data type
+bp_tsbl <- bp_proc %>%
+  as_tibble(index = DATE_TIME)
+
+# Get the date range
+first_date <- min(bp_tsbl$DATE)
+last_date <- max(bp_tsbl$DATE)
+
+# Start with the background colors for blood pressure levels
+bp_colors <- c(Low = "lightblue",
+               Normal = "#39ba25",
+               Elevated = "#e3e029",
+               `Stage 1` = "#ef8c00",
+               `Stage 2` = "darkred",
+               Crisis = "red")
+# Now the ranges for the different kinds of reading
+bp_ranges <- tribble(
+  ~TYPE,     ~LABEL,      ~CATEGORY,   ~LOW,   ~HIGH,
+  #-----|-------------|-------------|-------|--------
+  "SBP",  "Systolic",        "Low",     50,      90,
+  "SBP",  "Systolic",     "Normal",     90,     120,
+  "SBP",  "Systolic",   "Elevated",    120,     129,
+  "SBP",  "Systolic",    "Stage 1",    130,     139,
+  "SBP",  "Systolic",    "Stage 2",    140,     179,
+  "SBP",  "Systolic",     "Crisis",    180,     200,
+  # See https://www.scienceabc.com/eyeopeners/how-high-can-a-blood-pressure-go.html
+  "DBP", "Diastolic",        "Low",      0,      60,
+  "DBP", "Diastolic",     "Normal",     60,      80,
+  "DBP", "Diastolic",   "Elevated",     80,      80,
+  "DBP", "Diastolic",    "Stage 1",     80,      89,
+  "DBP", "Diastolic",    "Stage 2",     90,     119,
+  "DBP", "Diastolic",     "Crisis",    120,     200
+  # See https://www.scienceabc.com/eyeopeners/how-high-can-a-blood-pressure-go.html
+)
+
+# Now create the SBP & DBP templates.
+
+# SBP
+ranges <- filter(bp_ranges, TYPE == "SBP")
+# SBP_template <- 
+  ggplot() +
+  geom_rect(data = NULL,aes(
+     xmin = first_date,
+     xmax = last_date,
+     ymin = filter(ranges, CATEGORY == "Normal")$LOW, 
+     ymax = filter(ranges, CATEGORY == "Normal")$HIGH, 
+             fill = "blue"))
+
+
+
+
+
+
+```
+
+# TTO\# TO
